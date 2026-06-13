@@ -48,9 +48,8 @@ export const generateRandomCommissions = (
   } else if (reputationGrade === '乙') {
     officialSealChance = 0.08;
     normalSealChance = 0.04;
-  } else {
-    normalSealChance = 0.02;
   }
+  // 丙级及以下不生成任何封签委托
   
   for (let i = 0; i < count; i++) {
     const goods = goodsList[Math.floor(Math.random() * goodsList.length)];

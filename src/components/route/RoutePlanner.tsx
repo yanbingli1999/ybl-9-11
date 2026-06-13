@@ -32,7 +32,7 @@ const RoutePlanner = () => {
   
   const availableRoutes = useMemo(() => {
     if (!destinationId) return [];
-    return routes.filter(
+    const direct = routes.filter(
       r => {
         const isMatch = (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
           (r.fromCityId === destinationId && r.toCityId === 'yuegang');
@@ -41,6 +41,37 @@ const RoutePlanner = () => {
         return true;
       }
     );
+    
+    if (destinationId === 'beijing' && player.royalRoutesUnlocked) {
+      const yuegangToNanjingRoutes = routes.filter(
+        r => (r.fromCityId === 'yuegang' && r.toCityId === 'nanjing') ||
+             (r.fromCityId === 'nanjing' && r.toCityId === 'yuegang')
+      );
+      const nanjingToBeijingRoyal = routes.find(r => r.id === 'nanjing-beijing-royal');
+      
+      if (nanjingToBeijingRoyal) {
+        yuegangToNanjingRoutes.forEach(firstLeg => {
+          const comboRoute = {
+            id: `via-nanjing-royal-${firstLeg.type}-${firstLeg.id}`,
+            fromCityId: 'yuegang',
+            toCityId: 'beijing',
+            type: firstLeg.type,
+            distance: firstLeg.distance + nanjingToBeijingRoyal.distance,
+            baseTimeHours: firstLeg.baseTimeHours + nanjingToBeijingRoyal.baseTimeHours,
+            baseCost: firstLeg.baseCost + nanjingToBeijingRoyal.baseCost,
+            stops: firstLeg.stops + nanjingToBeijingRoyal.stops,
+            condition: Math.min(firstLeg.condition, nanjingToBeijingRoyal.condition),
+            isRoyal: true,
+            viaNanjing: true,
+            firstLegId: firstLeg.id,
+            secondLegId: nanjingToBeijingRoyal.id,
+          };
+          direct.push(comboRoute);
+        });
+      }
+    }
+    
+    return direct;
   }, [routes, destinationId, player.royalRoutesUnlocked]);
   
   const lockedRoyalRoutes = useMemo(() => {
@@ -178,6 +209,7 @@ const RoutePlanner = () => {
                       const routeType = route.type === 'land' ? '陆路' : '水路';
                       const routeTypeColor = route.type === 'land' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
                       const isRoyal = route.isRoyal;
+                      const isViaNanjing = (route as any).viaNanjing;
                       
                       return (
                         <button
@@ -194,14 +226,19 @@ const RoutePlanner = () => {
                           }`}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${routeTypeColor}`}>
                                 {routeType}
                               </span>
                               {isRoyal && (
                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-600 text-white flex items-center gap-1">
                                   <Crown className="w-3 h-3" />
-                                  皇家官道
+                                  {isViaNanjing ? '皇家中转线' : '皇家官道'}
+                                </span>
+                              )}
+                              {isViaNanjing && (
+                                <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 font-medium">
+                                  南京中转
                                 </span>
                               )}
                               <span className="font-medium text-slate-800">{route.distance} 里</span>
@@ -210,18 +247,22 @@ const RoutePlanner = () => {
                               基础费用: {route.baseCost} 金币
                             </span>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-slate-500">
+                          <div className="flex items-center gap-4 text-sm text-slate-500 flex-wrap">
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
                               约 {route.baseTimeHours} 小时
                             </span>
                             <span>驿站停靠: {route.stops} 次</span>
                             <span>路况: {Math.round(route.condition * 100)}%</span>
-                            {isRoyal && (
+                            {isViaNanjing ? (
+                              <span className="text-indigo-600 font-medium flex items-center gap-1">
+                                📍 月港 → 南京 → 北京
+                              </span>
+                            ) : isRoyal ? (
                               <span className="text-yellow-600 font-medium flex items-center gap-1">
                                 ✨ 路况极佳 · 免税通行
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         </button>
                       );

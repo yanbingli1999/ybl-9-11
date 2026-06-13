@@ -522,13 +522,12 @@ export const useGameStore = create<GameState>((set, get) => ({
           };
           sealedDescription = '（凭官府封签免税）';
         } else {
-          const originalGold = Math.abs(effect.value as number);
           effect = {
-            ...effect,
-            value: -Math.floor(originalGold * 0.3),
-            description: `出示普通封签，税吏减免大部分税金，仅收缴 ${Math.floor(originalGold * 0.3)} 金币`,
+            type: 'reputation',
+            value: 10,
+            description: '出示封签验讫，税吏按规放行，声望小幅提升！',
           };
-          sealedDescription = '（凭普通封签减税）';
+          sealedDescription = '（凭普通封签免税）';
         }
       } else if (effect.type === 'reputation' && (effect.value as number) > 0) {
         effect = {
@@ -803,7 +802,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   getAvailableRoutes: (destinationId: string) => {
     const state = get();
-    return state.routes.filter(
+    const directRoutes = state.routes.filter(
       r => {
         const isMatch = (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
           (r.fromCityId === destinationId && r.toCityId === 'yuegang');
@@ -812,6 +811,39 @@ export const useGameStore = create<GameState>((set, get) => ({
         return true;
       }
     );
+    
+    if (destinationId === 'beijing' && state.player.royalRoutesUnlocked) {
+      const yuegangToNanjingRoutes = state.routes.filter(
+        r => (r.fromCityId === 'yuegang' && r.toCityId === 'nanjing') ||
+             (r.fromCityId === 'nanjing' && r.toCityId === 'yuegang')
+      );
+      const nanjingToBeijingRoyal = state.routes.find(
+        r => r.id === 'nanjing-beijing-royal'
+      );
+      
+      if (nanjingToBeijingRoyal) {
+        yuegangToNanjingRoutes.forEach(firstLeg => {
+          const comboRoute = {
+            id: `via-nanjing-royal-${firstLeg.type}-${firstLeg.id}`,
+            fromCityId: 'yuegang',
+            toCityId: 'beijing',
+            type: firstLeg.type,
+            distance: firstLeg.distance + nanjingToBeijingRoyal.distance,
+            baseTimeHours: firstLeg.baseTimeHours + nanjingToBeijingRoyal.baseTimeHours,
+            baseCost: firstLeg.baseCost + nanjingToBeijingRoyal.baseCost,
+            stops: firstLeg.stops + nanjingToBeijingRoyal.stops,
+            condition: Math.min(firstLeg.condition, nanjingToBeijingRoyal.condition),
+            isRoyal: true,
+            viaNanjing: true,
+            firstLegId: firstLeg.id,
+            secondLegId: nanjingToBeijingRoyal.id,
+          };
+          directRoutes.push(comboRoute);
+        });
+      }
+    }
+    
+    return directRoutes;
   },
   
   getCurrentDate: () => {
