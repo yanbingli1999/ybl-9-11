@@ -484,7 +484,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const tripId = state.currentTripId;
     if (!event || !tripId) return;
     
-    const effect = event.effects[choiceIndex];
+    let effect = { ...event.effects[choiceIndex] };
     const trip = state.trips.find(t => t.id === tripId);
     
     if (!trip || !effect) {
@@ -496,16 +496,63 @@ export const useGameStore = create<GameState>((set, get) => ({
       return;
     }
     
+    const tripCommissions = state.commissions.filter(
+      c => trip.commissionIds.includes(c.id)
+    );
+    const hasSealedGoods = tripCommissions.some(c => c.isSealed);
+    const hasRoyalSeal = tripCommissions.some(c => c.sealLevel === 'royal');
+    const hasOfficialSeal = tripCommissions.some(c => c.sealLevel === 'official');
+    
+    let sealedDescription = '';
+    
+    if (event.id === 'government-inspection' && hasSealedGoods) {
+      if (effect.type === 'gold' && (effect.value as number) < 0) {
+        if (hasRoyalSeal) {
+          effect = {
+            type: 'reputation',
+            value: 30,
+            description: '出示皇家封签，税吏恭敬放行，声望大增！',
+          };
+          sealedDescription = '（凭皇家封签免税）';
+        } else if (hasOfficialSeal) {
+          effect = {
+            type: 'reputation',
+            value: 20,
+            description: '出示官府封签，税吏核验放行，声望提升！',
+          };
+          sealedDescription = '（凭官府封签免税）';
+        } else {
+          const originalGold = Math.abs(effect.value as number);
+          effect = {
+            ...effect,
+            value: -Math.floor(originalGold * 0.3),
+            description: `出示普通封签，税吏减免大部分税金，仅收缴 ${Math.floor(originalGold * 0.3)} 金币`,
+          };
+          sealedDescription = '（凭普通封签减税）';
+        }
+      } else if (effect.type === 'reputation' && (effect.value as number) > 0) {
+        effect = {
+          ...effect,
+          value: (effect.value as number) + (hasRoyalSeal ? 30 : hasOfficialSeal ? 20 : 10),
+          description: effect.description + sealedDescription,
+        };
+      }
+    }
+    
     const eventEffect = {
       title: event.title,
       effect: { ...effect },
     };
     
+    const eventLogDescription = sealedDescription 
+      ? `${event.title}: ${effect.description}` 
+      : `${event.title}: ${effect.description}`;
+    
     const updatedTrips = state.trips.map(t => {
       if (t.id === tripId) {
         return {
           ...t,
-          events: [...t.events, `${event.title}: ${effect.description}`],
+          events: [...t.events, eventLogDescription],
           eventEffects: [...t.eventEffects, eventEffect],
         };
       }
@@ -587,7 +634,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       loadCalc.isOverloaded,
       trip.eventEffects,
       state.player.priceBonus,
-      routeCalc.totalTime
+      routeCalc.totalTime,
+      state.player.royalRoutesUnlocked || false
     );
     
     const ledgerEntries = generateLedgerEntries(
@@ -632,6 +680,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       updatedTrips
     );
     
+    const sealedCompletedCount = settlement.commissions.filter(
+      c => c.isSealed && !c.isLate && c.damaged === 0
+    ).length;
+    const currentSealedCount = state.player.sealedDeliveriesCompleted || 0;
+    
     set({
       player: {
         ...state.player,
@@ -639,6 +692,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         reputation: newReputation,
         reputationGrade: repInfo.grade as ReputationGrade,
         priceBonus: repInfo.priceBonus,
+        royalRoutesUnlocked: state.player.royalRoutesUnlocked || settlement.unlocksRoyalRoute,
+        sealedDeliveriesCompleted: currentSealedCount + sealedCompletedCount,
       },
       commissions: updatedCommissions,
       vehicles: updatedVehicles,
@@ -749,9 +804,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   getAvailableRoutes: (destinationId: string) => {
     const state = get();
     return state.routes.filter(
-      r => 
-        (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
-        (r.fromCityId === destinationId && r.toCityId === 'yuegang')
+      r => {
+        const isMatch = (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
+          (r.fromCityId === destinationId && r.toCityId === 'yuegang');
+        if (!isMatch) return false;
+        if (r.isRoyal && !state.player.royalRoutesUnlocked) return false;
+        return true;
+      }
     );
   },
   

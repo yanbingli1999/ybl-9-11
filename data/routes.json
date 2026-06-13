@@ -141,5 +141,29 @@
     "baseCost": 280,
     "stops": 1,
     "condition": 0.65
+  },
+  {
+    "id": "yuegang-beijing-royal",
+    "fromCityId": "yuegang",
+    "toCityId": "beijing",
+    "type": "land",
+    "distance": 520,
+    "baseTimeHours": 36,
+    "baseCost": 350,
+    "stops": 3,
+    "condition": 0.95,
+    "isRoyal": true
+  },
+  {
+    "id": "nanjing-beijing-royal",
+    "fromCityId": "nanjing",
+    "toCityId": "beijing",
+    "type": "land",
+    "distance": 350,
+    "baseTimeHours": 22,
+    "baseCost": 180,
+    "stops": 3,
+    "condition": 0.95,
+    "isRoyal": true
   }
 ]

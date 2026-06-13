@@ -22,6 +22,9 @@ export interface TripSettlement {
     actualReward: number;
     isLate: boolean;
     latePenalty: number;
+    isSealed?: boolean;
+    sealLevel?: 'royal' | 'official' | 'normal';
+    unlocksRoyalRoute?: boolean;
   }[];
   tripCost: number;
   totalIncome: number;
@@ -31,6 +34,7 @@ export interface TripSettlement {
   events: string[];
   lateCount: number;
   damageCount: number;
+  unlocksRoyalRoute: boolean;
 }
 
 export const calculateReputationGrade = (score: number): { grade: ReputationGrade; priceBonus: number } => {
@@ -88,13 +92,15 @@ export const settleTrip = (
   isOverloaded: boolean,
   eventEffects: { title: string; effect: any }[],
   reputationBonus: number,
-  totalTripHours: number
+  totalTripHours: number,
+  royalRoutesUnlocked: boolean = false
 ): TripSettlement => {
   let totalIncome = 0;
   let totalExpense = trip.totalCost;
   let reputationChange = 0;
   let lateCount = 0;
   let damageCount = 0;
+  let unlocksRoyalRoute = false;
   const eventDescriptions: string[] = [];
   
   let extraDelay = 0;
@@ -122,11 +128,57 @@ export const settleTrip = (
     const goods = goodsList.find(g => g.id === commission.goodsId);
     const goodsName = goods?.name || '未知货物';
     
+    const isSealed = commission.isSealed || false;
+    const sealLevel = commission.sealLevel;
+    
+    let damageMultiplier = 1;
+    let latePenaltyRate = 0.3;
+    let damageCompensationRate = 0.5;
+    let baseReputationLate = -30;
+    let baseReputationOnTime = 20;
+    let baseReputationDamage = -10;
+    let commissionUnlocksRoyal = false;
+    
+    if (isSealed) {
+      if (sealLevel === 'royal') {
+        damageMultiplier = 2.0;
+        latePenaltyRate = 0.6;
+        damageCompensationRate = 1.0;
+        baseReputationLate = -100;
+        baseReputationOnTime = 100;
+        baseReputationDamage = -50;
+        if (!royalRoutesUnlocked) {
+          commissionUnlocksRoyal = true;
+        }
+      } else if (sealLevel === 'official') {
+        damageMultiplier = 1.5;
+        latePenaltyRate = 0.5;
+        damageCompensationRate = 0.75;
+        baseReputationLate = -60;
+        baseReputationOnTime = 60;
+        baseReputationDamage = -25;
+      } else {
+        damageMultiplier = 1.2;
+        latePenaltyRate = 0.4;
+        damageCompensationRate = 0.6;
+        baseReputationLate = -40;
+        baseReputationOnTime = 30;
+        baseReputationDamage = -15;
+      }
+    }
+    
     const relevantEvents = eventEffects
       .filter(e => e.effect.type === 'damage')
       .map(e => {
         const event = e as any;
-        return { ...event, effects: [{ type: 'damage', value: e.effect.value }] };
+        const sealedDamageBoost = isSealed ? damageMultiplier : 1;
+        return { 
+          ...event, 
+          effects: [{ 
+            type: 'damage' as const, 
+            value: (e.effect.value as number) * sealedDamageBoost 
+          }] 
+        };
       });
     
     const damaged = calculateActualDamage(
@@ -149,13 +201,13 @@ export const settleTrip = (
       extraDelay
     );
     
-    const latePenalty = isLate ? Math.floor(commission.reward * 0.3) : 0;
+    const latePenalty = isLate ? Math.floor(commission.reward * latePenaltyRate) : 0;
     if (latePenalty > 0) {
       totalExpense += latePenalty;
     }
     
     if (damaged > 0) {
-      const damageCompensation = Math.floor(commission.reward * (damaged / commission.quantity) * 0.5);
+      const damageCompensation = Math.floor(commission.reward * (damaged / commission.quantity) * damageCompensationRate);
       totalExpense += damageCompensation;
     }
     
@@ -166,14 +218,20 @@ export const settleTrip = (
     totalIncome += actualReward;
     
     if (isLate) {
-      reputationChange -= 30;
+      reputationChange += baseReputationLate;
       lateCount++;
     } else {
-      reputationChange += 20;
+      reputationChange += baseReputationOnTime;
+      if (isSealed && sealLevel === 'royal' && damaged === 0) {
+        if (!royalRoutesUnlocked) {
+          unlocksRoyalRoute = true;
+          commissionUnlocksRoyal = true;
+        }
+      }
     }
     
     if (damaged > 0) {
-      reputationChange -= 10;
+      reputationChange += baseReputationDamage;
       damageCount++;
     }
     
@@ -187,6 +245,9 @@ export const settleTrip = (
       actualReward,
       isLate,
       latePenalty,
+      isSealed,
+      sealLevel,
+      unlocksRoyalRoute: commissionUnlocksRoyal,
     };
   });
   
@@ -203,6 +264,7 @@ export const settleTrip = (
     events: eventDescriptions,
     lateCount,
     damageCount,
+    unlocksRoyalRoute,
   };
 };
 

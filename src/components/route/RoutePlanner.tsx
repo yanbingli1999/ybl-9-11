@@ -1,4 +1,4 @@
-import { Truck, MapPin, Clock, Coins, AlertTriangle } from 'lucide-react';
+import { Truck, MapPin, Clock, Coins, AlertTriangle, Crown, Lock } from 'lucide-react';
 import { useGameStore } from '../../store/useGameStore';
 import { calculateRouteTime, calculateLoad, calculateTripCost } from '../../utils/routeCalc';
 import CommissionCard from '../port/CommissionCard';
@@ -33,11 +33,26 @@ const RoutePlanner = () => {
   const availableRoutes = useMemo(() => {
     if (!destinationId) return [];
     return routes.filter(
-      r => 
-        (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
-        (r.fromCityId === destinationId && r.toCityId === 'yuegang')
+      r => {
+        const isMatch = (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
+          (r.fromCityId === destinationId && r.toCityId === 'yuegang');
+        if (!isMatch) return false;
+        if (r.isRoyal && !player.royalRoutesUnlocked) return false;
+        return true;
+      }
     );
-  }, [routes, destinationId]);
+  }, [routes, destinationId, player.royalRoutesUnlocked]);
+  
+  const lockedRoyalRoutes = useMemo(() => {
+    if (!destinationId) return [];
+    return routes.filter(
+      r => {
+        const isMatch = (r.fromCityId === 'yuegang' && r.toCityId === destinationId) ||
+          (r.fromCityId === destinationId && r.toCityId === 'yuegang');
+        return isMatch && r.isRoyal && !player.royalRoutesUnlocked;
+      }
+    );
+  }, [routes, destinationId, player.royalRoutesUnlocked]);
   
   const selectedCommissionsData = selectedCommissions.map(id => 
     commissions.find(c => c.id === id)
@@ -153,7 +168,7 @@ const RoutePlanner = () => {
                   可选路线 - {destination?.name}
                 </h3>
                 
-                {availableRoutes.length === 0 ? (
+                {availableRoutes.length === 0 && lockedRoyalRoutes.length === 0 ? (
                   <div className="text-center py-4 text-slate-500">
                     暂无直达路线，请选择其他目的地
                   </div>
@@ -162,6 +177,7 @@ const RoutePlanner = () => {
                     {availableRoutes.map(route => {
                       const routeType = route.type === 'land' ? '陆路' : '水路';
                       const routeTypeColor = route.type === 'land' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
+                      const isRoyal = route.isRoyal;
                       
                       return (
                         <button
@@ -169,7 +185,11 @@ const RoutePlanner = () => {
                           onClick={() => selectRoute(route.id)}
                           className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
                             selectedRoute === route.id
-                              ? 'border-amber-500 bg-amber-50'
+                              ? isRoyal
+                                ? 'border-yellow-500 bg-yellow-50 ring-2 ring-yellow-500/30'
+                                : 'border-amber-500 bg-amber-50'
+                              : isRoyal
+                              ? 'border-yellow-200 hover:border-yellow-300 bg-gradient-to-r from-yellow-50/50 to-transparent'
                               : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
@@ -178,9 +198,15 @@ const RoutePlanner = () => {
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${routeTypeColor}`}>
                                 {routeType}
                               </span>
+                              {isRoyal && (
+                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-600 text-white flex items-center gap-1">
+                                  <Crown className="w-3 h-3" />
+                                  皇家官道
+                                </span>
+                              )}
                               <span className="font-medium text-slate-800">{route.distance} 里</span>
                             </div>
-                            <span className="text-sm text-slate-600">
+                            <span className={`text-sm ${isRoyal ? 'text-yellow-700 font-semibold' : 'text-slate-600'}`}>
                               基础费用: {route.baseCost} 金币
                             </span>
                           </div>
@@ -191,10 +217,52 @@ const RoutePlanner = () => {
                             </span>
                             <span>驿站停靠: {route.stops} 次</span>
                             <span>路况: {Math.round(route.condition * 100)}%</span>
+                            {isRoyal && (
+                              <span className="text-yellow-600 font-medium flex items-center gap-1">
+                                ✨ 路况极佳 · 免税通行
+                              </span>
+                            )}
                           </div>
                         </button>
                       );
                     })}
+                    
+                    {lockedRoyalRoutes.map(route => (
+                      <div
+                        key={route.id}
+                        className="w-full p-4 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 opacity-75"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-600">
+                              {route.type === 'land' ? '陆路' : '水路'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-300 text-slate-600 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              皇家官道
+                            </span>
+                            <span className="font-medium text-slate-600">{route.distance} 里</span>
+                          </div>
+                          <span className="text-sm text-slate-400">
+                            基础费用: {route.baseCost} 金币
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-4 text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              约 {route.baseTimeHours} 小时
+                            </span>
+                            <span>驿站停靠: {route.stops} 次</span>
+                            <span>路况: {Math.round(route.condition * 100)}%</span>
+                          </div>
+                          <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                            <Lock className="w-3 h-3" />
+                            完成皇家封签任务解锁
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

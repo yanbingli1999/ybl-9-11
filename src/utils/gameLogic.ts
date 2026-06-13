@@ -30,31 +30,75 @@ export const generateRandomCommissions = (
 ): Commission[] => {
   const commissions: Commission[] = [];
   const destinations = cities.filter(c => c.id !== 'yuegang');
+  const capitalDestinations = cities.filter(c => c.type === 'capital' || c.type === 'city');
   
   let qualityMultiplier = 1;
   if (reputationGrade === '甲') qualityMultiplier = 1.5;
   else if (reputationGrade === '乙') qualityMultiplier = 1.2;
   else if (reputationGrade === '丁') qualityMultiplier = 0.8;
   
+  let royalSealChance = 0;
+  let officialSealChance = 0;
+  let normalSealChance = 0;
+  
+  if (reputationGrade === '甲') {
+    royalSealChance = 0.15;
+    officialSealChance = 0.1;
+    normalSealChance = 0.05;
+  } else if (reputationGrade === '乙') {
+    officialSealChance = 0.08;
+    normalSealChance = 0.04;
+  } else {
+    normalSealChance = 0.02;
+  }
+  
   for (let i = 0; i < count; i++) {
     const goods = goodsList[Math.floor(Math.random() * goodsList.length)];
-    const destination = destinations[Math.floor(Math.random() * destinations.length)];
+    
+    const sealRoll = Math.random();
+    let isSealed = false;
+    let sealLevel: 'royal' | 'official' | 'normal' | undefined;
+    let rewardMultiplier = 1.2 + Math.random() * 0.6;
+    let deadlineMultiplier = 1;
+    let destinationPool = destinations;
+    
+    if (sealRoll < royalSealChance) {
+      isSealed = true;
+      sealLevel = 'royal';
+      rewardMultiplier = 2.0 + Math.random() * 0.5;
+      deadlineMultiplier = 0.6;
+      destinationPool = cities.filter(c => c.type === 'capital');
+    } else if (sealRoll < royalSealChance + officialSealChance) {
+      isSealed = true;
+      sealLevel = 'official';
+      rewardMultiplier = 1.6 + Math.random() * 0.3;
+      deadlineMultiplier = 0.7;
+      destinationPool = capitalDestinations;
+    } else if (sealRoll < royalSealChance + officialSealChance + normalSealChance) {
+      isSealed = true;
+      sealLevel = 'normal';
+      rewardMultiplier = 1.3 + Math.random() * 0.2;
+      deadlineMultiplier = 0.8;
+    }
+    
+    const destination = destinationPool.length > 0
+      ? destinationPool[Math.floor(Math.random() * destinationPool.length)]
+      : destinations[Math.floor(Math.random() * destinations.length)];
     
     const baseQuantity = Math.floor(Math.random() * 15) + 5;
-    const quantity = Math.ceil(baseQuantity * qualityMultiplier);
+    const quantity = Math.ceil(baseQuantity * qualityMultiplier) * (isSealed ? 1 : 1);
     
     const baseReward = goods.basePrice * quantity;
-    const rewardMultiplier = 1.2 + Math.random() * 0.6;
     const reward = Math.floor(baseReward * rewardMultiplier * qualityMultiplier);
     
     const deadlineBase = 12 + Math.floor(Math.random() * 36);
-    const deadlineHours = Math.ceil(deadlineBase / qualityMultiplier);
+    const deadlineHours = Math.ceil(deadlineBase * deadlineMultiplier / qualityMultiplier);
     
-    const isEmergency = Math.random() < 0.2;
+    const isEmergency = !isSealed && Math.random() < 0.2;
     const finalReward = isEmergency ? Math.floor(reward * 1.5) : reward;
     const finalDeadline = isEmergency ? Math.ceil(deadlineHours * 0.7) : deadlineHours;
     
-    commissions.push({
+    const commission: Commission = {
       id: generateId(),
       goodsId: goods.id,
       goodsName: goods.name,
@@ -66,7 +110,14 @@ export const generateRandomCommissions = (
       fragility: goods.fragility,
       isAccepted: false,
       createdAt: Date.now(),
-    });
+    };
+    
+    if (isSealed) {
+      commission.isSealed = true;
+      commission.sealLevel = sealLevel;
+    }
+    
+    commissions.push(commission);
   }
   
   return commissions;
@@ -121,6 +172,8 @@ export const createInitialPlayer = (): Player => {
     priceBonus: 0,
     currentDay: 1,
     timeOfDay: 'morning',
+    royalRoutesUnlocked: false,
+    sealedDeliveriesCompleted: 0,
   };
 };
 

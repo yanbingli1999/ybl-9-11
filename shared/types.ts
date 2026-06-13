@@ -17,6 +17,7 @@ export interface Route {
   baseCost: number;
   stops: number;
   condition: number;
+  isRoyal?: boolean;
 }
 
 export interface Goods {
@@ -87,6 +88,8 @@ export interface Commission {
   shippedAt?: number;
   shippedGameHours?: number;
   completedAt?: number;
+  isSealed?: boolean;
+  sealLevel?: 'royal' | 'official' | 'normal';
 }
 
 export interface PlayerVehicle {
@@ -151,6 +154,8 @@ export interface Player {
   priceBonus: number;
   currentDay: number;
   timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+  royalRoutesUnlocked?: boolean;
+  sealedDeliveriesCompleted?: number;
 }
 
 export interface SaveGame {
